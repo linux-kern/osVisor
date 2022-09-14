@@ -5,10 +5,10 @@ LLVM_STRIP ?= llvm-strip
 BPFTOOL_SRC := $(abspath ./bpftool/src)
 BPFTOOL_OUTPUT ?= $(abspath $(OUTPUT)/bpftool)
 BPFTOOL ?= $(BPFTOOL_OUTPUT)/bootstrap/bpftool
-LIBBPF_SRC := $(abspath ../src/cc/libbpf/src)
+LIBBPF_SRC := $(abspath ./bcc/cc/libbpf/src)
 LIBBPF_OBJ := $(abspath $(OUTPUT)/libbpf.a)
 LIBBLAZESYM_SRC := $(abspath blazesym/target/release/libblazesym.a)
-INCLUDES := -I$(OUTPUT) -I../src/cc/libbpf/include/uapi
+INCLUDES := -I$(OUTPUT) -I./bcc/cc/libbpf/include/uapi
 CFLAGS := -g -O2 -Wall
 BPFCFLAGS := -g -O2 -Wall
 INSTALL ?= install
@@ -230,6 +230,16 @@ install: $(APPS) $(APP_ALIASES)
 	$(Q)$(INSTALL) -m 0755 -d $(DESTDIR)$(prefix)/bin
 	$(Q)$(INSTALL) $(APPS) $(DESTDIR)$(prefix)/bin
 	$(Q)cp -a $(APP_ALIASES) $(DESTDIR)$(prefix)/bin
+
+vmlinux-%.btf: tcptracer tcplife tcpstates tcprtt tcptop $(BPFTOOL)
+	$(Q)mkdir -p .output/btfs
+	$(Q)$(BPFTOOL) gen min_core_btf btfs/$@ \
+		.output/btfs/$@ \
+		.output/tcptracer.bpf.o	\
+		.output/tcplife.bpf.o	\
+		.output/tcpstates.bpf.o	\
+		.output/tcprtt.bpf.o	\
+		.output/tcptop.bpf.o
 
 .PHONY: force
 force:
