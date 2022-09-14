@@ -206,11 +206,12 @@ int main(int argc, char **argv)
 	libbpf_set_strict_mode(LIBBPF_STRICT_ALL);
 	libbpf_set_print(libbpf_print_fn);
 
-	err = ensure_core_btf(&open_opts);
-	if (err) {
-		warn("failed to fetch necessary BTF for CO-RE: %s\n", strerror(-err));
-		return 1;
-	}
+    LIBBPF_OPTS(bpf_object_open_opts, opts, .btf_custom_path = "/ebpf/vmlinux.btf");
+	//err = ensure_core_btf(&open_opts);
+	//if (err) {
+	//	warn("failed to fetch necessary BTF for CO-RE: %s\n", strerror(-err));
+	//	return 1;
+	//}
 
 	obj = tcpstates_bpf__open_opts(&open_opts);
 	if (!obj) {

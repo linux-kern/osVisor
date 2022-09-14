@@ -228,7 +228,8 @@ int main(int argc, char **argv)
 	libbpf_set_strict_mode(LIBBPF_STRICT_ALL);
 	libbpf_set_print(libbpf_print_fn);
 
-	obj = tcprtt_bpf__open();
+    LIBBPF_OPTS(bpf_object_open_opts, opts, .btf_custom_path = "/ebpf/vmlinux.btf");
+	obj = tcprtt_bpf__open_opts(&opts);
 	if (!obj) {
 		fprintf(stderr, "failed to open BPF object\n");
 		return 1;

@@ -354,7 +354,8 @@ int main(int argc, char **argv)
 	if (ipv6_only)
 		family = AF_INET6;
 
-	obj = tcptop_bpf__open();
+    LIBBPF_OPTS(bpf_object_open_opts, opts, .btf_custom_path = "/ebpf/vmlinux.btf");
+	obj = tcptop_bpf__open_opts(&opts);
 	if (!obj) {
 		warn("failed to open BPF object\n");
 		return 1;
