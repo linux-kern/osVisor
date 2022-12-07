@@ -1,99 +1,33 @@
 # SPDX-License-Identifier: (LGPL-2.1 OR BSD-2-Clause)
 OUTPUT := $(abspath .output)
-CLANG ?= clang
-LLVM_STRIP ?= llvm-strip
+CLANG ?= clang-12
+LLVM_STRIP ?= llvm-strip-12
 BPFTOOL_SRC := $(abspath ./bpftool/src)
 BPFTOOL_OUTPUT ?= $(abspath $(OUTPUT)/bpftool)
 BPFTOOL ?= $(BPFTOOL_OUTPUT)/bootstrap/bpftool
-LIBBPF_SRC := $(abspath ./bcc/cc/libbpf/src)
+LIBBPF_SRC := $(abspath ./libbpf/src)
 LIBBPF_OBJ := $(abspath $(OUTPUT)/libbpf.a)
-LIBBLAZESYM_SRC := $(abspath blazesym/target/release/libblazesym.a)
-INCLUDES := -I$(OUTPUT) -I./bcc/cc/libbpf/include/uapi
+BTFHUB_ARCHIVE ?= $(abspath btfhub)
+INCLUDES := -I$(OUTPUT) -I./libbpf/include/uapi
 CFLAGS := -g -O2 -Wall
 BPFCFLAGS := -g -O2 -Wall
 INSTALL ?= install
 prefix ?= /usr/local
-ARCH := $(shell uname -m | sed 's/x86_64/x86/' | sed 's/aarch64/arm64/' \
-			 | sed 's/ppc64le/powerpc/' | sed 's/mips.*/mips/' \
-			 | sed 's/riscv64/riscv/' | sed 's/loongarch.*/loongarch/')
-BTFHUB_ARCHIVE ?= $(abspath btfhub-archive)
+ARCH := $(shell uname -m | sed 's/x86_64/x86/' | sed 's/aarch64/arm64/')
 ifeq ($(ARCH),x86)
 CARGO ?= $(shell which cargo)
-ifeq ($(strip $(CARGO)),)
-USE_BLAZESYM ?= 0
-else
-USE_BLAZESYM ?= 1
-endif
 endif
 
 ifeq ($(wildcard $(ARCH)/),)
 $(error Architecture $(ARCH) is not supported yet. Please open an issue)
 endif
 
-BZ_APPS = \
-	opensnoop \
-	#
-
 APPS = \
-	bashreadline \
-	bindsnoop \
-	biolatency \
 	biopattern \
-	biosnoop \
-	biostacks \
-	bitesize \
-	cachestat \
-	cpudist \
-	cpufreq \
-	drsnoop \
-	execsnoop \
-	exitsnoop \
-	filelife \
-	filetop \
-	fsdist \
-	fsslower \
-	funclatency \
-	gethostlatency \
-	hardirqs \
-	javagc \
-	klockstat \
-	ksnoop \
-	llcstat \
-	mdflush \
-	mountsnoop \
-	numamove \
-	offcputime \
-	oomkill \
-	readahead \
-	runqlat \
-	runqlen \
-	runqslower \
-	sigsnoop \
-	slabratetop \
-	softirqs \
-	solisten \
-	statsnoop \
-	syscount \
-	tcptracer \
-	tcpconnect \
-	tcpconnlat \
-	tcplife \
-	tcprtt \
-	tcpstates \
-	tcpsynbl \
-	tcptop \
-	vfsstat \
-	wakeuptime \
-	$(BZ_APPS) \
 	#
 
 # export variables that are used in Makefile.btfgen as well.
-export OUTPUT BPFTOOL ARCH BTFHUB_ARCHIVE APPS
-
-FSDIST_ALIASES = btrfsdist ext4dist nfsdist xfsdist
-FSSLOWER_ALIASES = btrfsslower ext4slower nfsslower xfsslower
-SIGSNOOP_ALIAS = killsnoop
-APP_ALIASES = $(FSDIST_ALIASES) $(FSSLOWER_ALIASES) ${SIGSNOOP_ALIAS}
+export OUTPUT BPFTOOL ARCH APPS BTFHUB_ARCHIVE
 
 COMMON_OBJ = \
 	$(OUTPUT)/trace_helpers.o \
@@ -105,13 +39,6 @@ COMMON_OBJ = \
 	$(if $(ENABLE_MIN_CORE_BTFS),$(OUTPUT)/min_core_btf_tar.o) \
 	#
 
-ifeq ($(USE_BLAZESYM),1)
-COMMON_OBJ += \
-	$(OUTPUT)/libblazesym.a \
-	$(OUTPUT)/blazesym.h \
-	#
-endif
-
 define allow-override
   $(if $(or $(findstring environment,$(origin $(1))),\
             $(findstring command line,$(origin $(1)))),,\
@@ -122,7 +49,7 @@ $(call allow-override,CC,$(CROSS_COMPILE)cc)
 $(call allow-override,LD,$(CROSS_COMPILE)ld)
 
 .PHONY: all
-all: $(APPS) $(APP_ALIASES)
+all: $(APPS)
 
 ifeq ($(V),1)
 Q =
@@ -139,29 +66,11 @@ endif
 ifneq ($(EXTRA_LDFLAGS),)
 LDFLAGS += $(EXTRA_LDFLAGS)
 endif
-ifeq ($(USE_BLAZESYM),1)
-CFLAGS += -DUSE_BLAZESYM=1
-endif
-
-ifeq ($(USE_BLAZESYM),1)
-LDFLAGS += $(OUTPUT)/libblazesym.a -lrt -lpthread -ldl
-endif
 
 .PHONY: clean
 clean:
 	$(call msg,CLEAN)
-	$(Q)rm -rf $(OUTPUT) $(APPS) $(APP_ALIASES)
-
-$(LIBBLAZESYM_SRC)::
-	$(Q)cd blazesym && cargo build --release --features=cheader
-
-$(OUTPUT)/libblazesym.a: $(LIBBLAZESYM_SRC) | $(OUTPUT)
-	$(call msg,LIB,$@)
-	$(Q)cp $(LIBBLAZESYM_SRC) $@
-
-$(OUTPUT)/blazesym.h: $(LIBBLAZESYM_SRC) | $(OUTPUT)
-	$(call msg,INC,$@)
-	$(Q)cp blazesym/target/release/blazesym.h $@
+	$(Q)rm -rf $(OUTPUT) $(APPS)
 
 $(OUTPUT) $(OUTPUT)/libbpf $(BPFTOOL_OUTPUT):
 	$(call msg,MKDIR,$@)
@@ -174,10 +83,6 @@ $(BPFTOOL): | $(BPFTOOL_OUTPUT)
 $(APPS): %: $(OUTPUT)/%.o $(LIBBPF_OBJ) $(COMMON_OBJ) | $(OUTPUT)
 	$(call msg,BINARY,$@)
 	$(Q)$(CC) $(CFLAGS) $^ $(LDFLAGS) -lelf -lz -o $@
-
-ifeq ($(USE_BLAZESYM),1)
-$(patsubst %,$(OUTPUT)/%.o,$(BZ_APPS)): $(OUTPUT)/blazesym.h
-endif
 
 $(patsubst %,$(OUTPUT)/%.o,$(APPS)): %.o: %.skel.h
 
@@ -195,13 +100,9 @@ $(OUTPUT)/%.bpf.o: %.bpf.c $(LIBBPF_OBJ) $(wildcard %.h) $(ARCH)/vmlinux.h | $(O
 		     -I$(ARCH)/ $(INCLUDES) -c $(filter %.c,$^) -o $@ &&      \
 	$(LLVM_STRIP) -g $@
 
-btfhub-archive: force
-	$(call msg,GIT,$@)
-	$(Q)[ -d "$(BTFHUB_ARCHIVE)" ] || git clone -q https://github.com/aquasecurity/btfhub-archive/ $(BTFHUB_ARCHIVE)
-	$(Q)cd $(BTFHUB_ARCHIVE) && git pull
 
 ifdef ENABLE_MIN_CORE_BTFS
-$(OUTPUT)/min_core_btf_tar.o: $(patsubst %,$(OUTPUT)/%.bpf.o,$(APPS)) btfhub-archive | bpftool
+$(OUTPUT)/min_core_btf_tar.o: $(patsubst %,$(OUTPUT)/%.bpf.o,$(APPS))
 	$(Q)$(MAKE) -f Makefile.btfgen
 endif
 
@@ -217,19 +118,11 @@ $(FSSLOWER_ALIASES): fsslower
 	$(call msg,SYMLINK,$@)
 	$(Q)ln -f -s $^ $@
 
-$(FSDIST_ALIASES): fsdist
-	$(call msg,SYMLINK,$@)
-	$(Q)ln -f -s $^ $@
-
-$(SIGSNOOP_ALIAS): sigsnoop
-	$(call msg,SYMLINK,$@)
-	$(Q)ln -f -s $^ $@
-
-install: $(APPS) $(APP_ALIASES)
+install: $(APPS)
 	$(call msg, INSTALL libbpf-tools)
 	$(Q)$(INSTALL) -m 0755 -d $(DESTDIR)$(prefix)/bin
 	$(Q)$(INSTALL) $(APPS) $(DESTDIR)$(prefix)/bin
-	$(Q)cp -a $(APP_ALIASES) $(DESTDIR)$(prefix)/bin
+	$(Q)cp -a $(DESTDIR)$(prefix)/bin
 
 vmlinux-%.btf: tcptracer tcplife tcpstates tcprtt tcptop $(BPFTOOL)
 	$(Q)mkdir -p .output/btfs

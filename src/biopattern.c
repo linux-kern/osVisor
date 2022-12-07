@@ -159,7 +159,7 @@ static int print_map(struct bpf_map *counters, struct partitions *partitions)
 
 int main(int argc, char **argv)
 {
-	LIBBPF_OPTS(bpf_object_open_opts, open_opts);
+	LIBBPF_OPTS(bpf_object_open_opts, open_opts, .btf_custom_path = "/ebpf/vmlinux.btf");
 	struct partitions *partitions = NULL;
 	const struct partition *partition;
 	static const struct argp argp = {
@@ -176,12 +176,6 @@ int main(int argc, char **argv)
 
 	libbpf_set_strict_mode(LIBBPF_STRICT_ALL);
 	libbpf_set_print(libbpf_print_fn);
-
-	err = ensure_core_btf(&open_opts);
-	if (err) {
-		fprintf(stderr, "failed to fetch necessary BTF for CO-RE: %s\n", strerror(-err));
-		return 1;
-	}
 
 	obj = biopattern_bpf__open_opts(&open_opts);
 	if (!obj) {
